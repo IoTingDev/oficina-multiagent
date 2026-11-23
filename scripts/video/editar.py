@@ -46,7 +46,7 @@ def cargar_marca():
         "tiktok": "@ing_cjuan",
     }
     if MARCA_JSON.exists():
-        base.update(json.loads(MARCA_JSON.read_text(encoding="utf-8")))
+        base.update(json.loads(MARCA_JSON.read_text(encoding="utf-8-sig")))
     base.setdefault("color_fondo_cierre", base["color_secundario"])
     base.setdefault("color_texto_cierre", base["color_texto"])
     base.setdefault("logo_marca_agua", base["logo"])
@@ -217,7 +217,7 @@ def crear_ass(ruta, version, marca, subtitulos, gancho, dur_contenido, con_cierr
 # ------------------------------------------------------------------- render
 def render(config_path):
     cfg_path = Path(config_path).resolve()
-    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
     marca = cargar_marca()
     fuente = Path(cfg["fuente"])
     if not fuente.is_absolute():
@@ -244,7 +244,7 @@ def render(config_path):
 
     # 2) Subtítulos desde la transcripción (si existe)
     tr_path = Path(f"{fuente}.transcripcion.json")
-    transcripcion = json.loads(tr_path.read_text(encoding="utf-8")) if tr_path.exists() else {}
+    transcripcion = json.loads(tr_path.read_text(encoding="utf-8-sig")) if tr_path.exists() else {}
     if not transcripcion:
         print("Aviso: no hay transcripción; el video sale sin subtítulos. Corre primero 'transcribir'.")
     palabras = palabras_en_linea(transcripcion, tramos)
