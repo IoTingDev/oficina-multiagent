@@ -1,0 +1,13 @@
+# Videos pesados: no van a GitHub
+redes/crudos/*
+redes/por-aprobar/*.mp4
+redes/publicado/*.mp4
+!redes/**/.gitkeep
+*.transcripcion.json
+
+# Secretos
+.env
+*.pem
+.claude/settings.local.json
+
+__pycache__/

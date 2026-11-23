@@ -1,0 +1,13 @@
+{
+  "color_primario": "#25A9E1",
+  "color_secundario": "#2C5DA7",
+  "color_texto": "#FFFFFF",
+  "color_fondo_cierre": "#FFFFFF",
+  "color_texto_cierre": "#2C5DA7",
+  "fuente": "Montserrat",
+  "logo": "marca/logo.png",
+  "logo_marca_agua": "marca/isotipo.png",
+  "web": "iotingdev.com",
+  "instagram": "@iotingdev",
+  "tiktok": "@ing_cjuan"
+}
