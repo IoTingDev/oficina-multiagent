@@ -6,7 +6,7 @@ Codex viene incluido en los planes de ChatGPT, incluso Free y Go, con límites d
 ## Instalación (una vez)
 Lo hace todo `scripts/instalar.ps1`. Si prefieres hacerlo a mano:
 ```bash
-npm install -g @openai/codex
+npm install -g @openai/codex@0.150.0   # >=0.160 no trae "codex mcp-server"
 codex login          # inicia sesión con tu cuenta de ChatGPT
 ```
 

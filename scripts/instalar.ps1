@@ -1,4 +1,4 @@
-# Instalador de la Oficina Virtual IoTing Dev (Windows)
+﻿# Instalador de la Oficina Virtual IoTing Dev (Windows)
 # Uso (PowerShell, en la carpeta del repo):
 #   powershell -ExecutionPolicy Bypass -File scripts\instalar.ps1
 # Instala: ffmpeg, Python (si falta), faster-whisper, Node.js (si falta), Codex CLI,
@@ -11,32 +11,32 @@ function Refrescar-Path {
               [Environment]::GetEnvironmentVariable("Path", "User")
 }
 function Existe($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
-function Winget($id) {
+function Instalar-Winget($id) {
   winget install --id $id -e --silent --accept-package-agreements --accept-source-agreements
   Refrescar-Path
 }
 
 Paso "ffmpeg"
-if (Existe ffmpeg) { Write-Host "ya instalado" } else { Winget "Gyan.FFmpeg" }
+if (Existe ffmpeg) { Write-Host "ya instalado" } else { Instalar-Winget "Gyan.FFmpeg" }
 
 Paso "Python"
-if (Existe python) { python --version } else { Winget "Python.Python.3.12" }
+if (Existe python) { python --version } else { Instalar-Winget "Python.Python.3.12" }
 
 Paso "faster-whisper (transcripción local)"
 python -m pip install --upgrade pip
 python -m pip install -r "$PSScriptRoot\video\requirements.txt"
 
 Paso "Node.js"
-if (Existe node) { node --version } else { Winget "OpenJS.NodeJS.LTS" }
+if (Existe node) { node --version } else { Instalar-Winget "OpenJS.NodeJS.LTS" }
 
 Paso "Codex CLI"
-npm install -g @openai/codex
+npm install -g @openai/codex@0.150.0  # fijada: versiones >=0.160 ya no incluyen "codex mcp-server"
 Refrescar-Path
 codex --version
 
 Paso "Conectar Codex a Claude Code (MCP)"
 if (Existe claude) {
-  claude mcp remove codex -s user 2>$null
+  cmd /c "claude mcp remove codex -s user >nul 2>&1"
   claude mcp add codex -s user -- codex mcp-server
   claude mcp list
 } else {
