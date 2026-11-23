@@ -13,6 +13,9 @@ Comandos:
   python editar.py silencios <video>
       -> imprime los tramos con voz (JSON)
 
+  python editar.py fotogramas <video> [--n 8]
+      -> <video>.fotogramas.jpg  (hoja de contacto para que el agente vea el video)
+
   python editar.py render <corte.json>
       -> un .mp4 vertical 1080x1920 por cada versión pedida (tiktok / instagram)
 
@@ -215,94 +218,153 @@ def crear_ass(ruta, version, marca, subtitulos, gancho, dur_contenido, con_cierr
 
 
 # ------------------------------------------------------------------- render
+def _resolver(ruta, base_dir):
+    p = Path(ruta)
+    if p.is_absolute():
+        return p
+    return (base_dir / p) if (base_dir / p).exists() else RAIZ / p
+
+
 def render(config_path):
+    """
+    Une uno o varios videos en una pieza vertical. Cada segmento puede traer su propia
+    "fuente" (para contar una historia con varios clips) y una "velocidad" (>1 = timelapse,
+    el audio se silencia en ese tramo).
+    """
     cfg_path = Path(config_path).resolve()
     cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
     marca = cargar_marca()
-    fuente = Path(cfg["fuente"])
-    if not fuente.is_absolute():
-        fuente = (cfg_path.parent / fuente) if (cfg_path.parent / fuente).exists() else RAIZ / fuente
-    if not fuente.exists():
-        sys.exit(f"No encuentro el video fuente: {fuente}")
+    fuente_def = cfg.get("fuente")
+    segmentos = cfg.get("segmentos") or [{"inicio": 0, "fin": None}]
+
+    # Fuentes únicas, en orden de aparición
+    fuentes, info = [], {}
+    for s in segmentos:
+        f = _resolver(s.get("fuente") or fuente_def, cfg_path.parent)
+        if not f.exists():
+            sys.exit(f"No encuentro el video fuente: {f}")
+        s["_f"] = str(f)
+        if str(f) not in info:
+            fuentes.append(str(f))
+            tr = Path(f"{f}.transcripcion.json")
+            info[str(f)] = {
+                "idx": len(fuentes) - 1,
+                "audio": tiene_audio(f),
+                "dur": duracion(f),
+                "trans": json.loads(tr.read_text(encoding="utf-8-sig")) if tr.exists() else {},
+            }
+    sin_trans = [Path(f).name for f in fuentes if not info[f]["trans"]]
+    if sin_trans:
+        print(f"Aviso: sin transcripción (sin subtítulos): {', '.join(sin_trans)}")
+
     salida_dir = Path(cfg.get("carpeta_salida", RAIZ / "redes" / "por-aprobar"))
     if not salida_dir.is_absolute():
         salida_dir = RAIZ / salida_dir
     salida_dir.mkdir(parents=True, exist_ok=True)
-    nombre = cfg.get("nombre", fuente.stem)
-    audio = tiene_audio(fuente)
+    nombre = cfg.get("nombre", Path(fuentes[0]).stem)
 
-    # 1) Tramos finales (quitando silencios si se pide)
-    segmentos = cfg.get("segmentos") or [{"inicio": 0, "fin": duracion(fuente)}]
-    silencios = detectar_silencios(fuente) if (cfg.get("quitar_silencios", True) and audio) else []
-    tramos = []
+    # 1) Tramos finales: (fuente, inicio, fin, velocidad)
+    tramos, cache_sil = [], {}
     for s in segmentos:
-        tramos += tramos_con_voz(float(s["inicio"]), float(s["fin"]), silencios) if silencios \
-            else [(float(s["inicio"]), float(s["fin"]))]
+        f, vel = s["_f"], float(s.get("velocidad", 1))
+        a = float(s.get("inicio", 0))
+        b = float(s["fin"]) if s.get("fin") is not None else info[f]["dur"]
+        quitar = s.get("quitar_silencios", cfg.get("quitar_silencios", True))
+        if quitar and vel == 1 and info[f]["audio"]:
+            if f not in cache_sil:
+                cache_sil[f] = detectar_silencios(f)
+            partes = tramos_con_voz(a, b, cache_sil[f]) if cache_sil[f] else [(a, b)]
+        else:
+            partes = [(a, b)]
+        tramos += [(f, x, y, vel) for x, y in partes]
     if not tramos:
-        sys.exit("No quedó ningún tramo con voz; revisa los segmentos o pon \"quitar_silencios\": false")
-    dur = sum(b - a for a, b in tramos)
+        sys.exit("No quedó ningún tramo; revisa los segmentos o pon \"quitar_silencios\": false")
+    dur = sum((b - a) / v for _, a, b, v in tramos)
 
-    # 2) Subtítulos desde la transcripción (si existe)
-    tr_path = Path(f"{fuente}.transcripcion.json")
-    transcripcion = json.loads(tr_path.read_text(encoding="utf-8-sig")) if tr_path.exists() else {}
-    if not transcripcion:
-        print("Aviso: no hay transcripción; el video sale sin subtítulos. Corre primero 'transcribir'.")
-    palabras = palabras_en_linea(transcripcion, tramos)
+    # 2) Subtítulos: palabras de cada fuente llevadas a la línea de tiempo final
+    palabras, t = [], 0.0
+    for f, a, b, v in tramos:
+        if v == 1:
+            for seg in info[f]["trans"].get("segmentos", []):
+                for w in seg.get("palabras", []):
+                    c = (w["inicio"] + w["fin"]) / 2
+                    if a <= c <= b:
+                        palabras.append({"inicio": max(a, w["inicio"]) - a + t,
+                                         "fin": min(b, w["fin"]) - a + t, "palabra": w["palabra"]})
+        t += (b - a) / v
 
+    gancho_cfg = cfg.get("gancho")
     for version in cfg.get("versiones", ["tiktok", "instagram"]):
         con_cierre = version == "instagram" and cfg.get("cierre", True)
         subs = agrupar(palabras, 3 if version == "tiktok" else 6)
         out = salida_dir / f"{nombre}_{version}.mp4"
+        gancho = gancho_cfg.get(version) if isinstance(gancho_cfg, dict) else gancho_cfg
         with tempfile.TemporaryDirectory() as tmp:
-            crear_ass(Path(tmp) / "subs.ass", version, marca, subs,
-                      cfg.get("gancho", {}).get(version) if isinstance(cfg.get("gancho"), dict) else cfg.get("gancho"),
-                      dur, con_cierre)
-            entradas = ["-i", str(fuente)]
+            crear_ass(Path(tmp) / "subs.ass", version, marca, subs, gancho, dur, con_cierre)
+            entradas = []
+            for f in fuentes:
+                entradas += ["-i", f]
+            n_src = len(fuentes)
             logo_ok = marca["logo_path"].exists() and marca["agua_path"].exists()
             if logo_ok:
-                # entrada 1 = isotipo (marca de agua), entrada 2 = logo completo (cierre)
                 entradas += ["-i", str(marca["agua_path"]), "-i", str(marca["logo_path"])]
             fc = []
-            for i, (a, b) in enumerate(tramos):
-                fc.append(f"[0:v]trim=start={a:.3f}:end={b:.3f},setpts=PTS-STARTPTS[v{i}]")
-                if audio:
-                    fc.append(f"[0:a]atrim=start={a:.3f}:end={b:.3f},asetpts=PTS-STARTPTS[a{i}]")
+            for i, (f, a, b, v) in enumerate(tramos):
+                k = info[f]["idx"]
+                d_out = (b - a) / v
+                fc.append(f"[{k}:v]trim=start={a:.3f}:end={b:.3f},setpts=(PTS-STARTPTS)/{v},fps={FPS},split[bg{i}][fg{i}]")
+                fc.append(f"[bg{i}]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},boxblur=25:5[bgb{i}]")
+                fc.append(f"[fg{i}]scale={W}:{H}:force_original_aspect_ratio=decrease[fgs{i}]")
+                fc.append(f"[bgb{i}][fgs{i}]overlay=(W-w)/2:(H-h)/2,setsar=1,format=yuv420p[v{i}]")
+                if info[f]["audio"] and v == 1:
+                    fc.append(f"[{k}:a]atrim=start={a:.3f}:end={b:.3f},asetpts=PTS-STARTPTS,"
+                              f"aresample=48000,aformat=channel_layouts=stereo[a{i}]")
                 else:
-                    fc.append(f"anullsrc=r=48000:cl=stereo,atrim=duration={b - a:.3f}[a{i}]")
-            n = len(tramos)
-            fc.append("".join(f"[v{i}][a{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=1[vc][ac]")
-            # Vertical 9:16: fondo desenfocado + video centrado
-            fc.append(f"[vc]fps={FPS},split[bg][fg]")
-            fc.append(f"[bg]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},boxblur=25:5[bgb]")
-            fc.append(f"[fg]scale={W}:{H}:force_original_aspect_ratio=decrease[fgs]")
-            fc.append("[bgb][fgs]overlay=(W-w)/2:(H-h)/2,setsar=1,format=yuv420p[vv]")
-            ultimo_v, ultimo_a = "vv", "ac"
+                    fc.append(f"anullsrc=r=48000:cl=stereo,atrim=duration={d_out:.3f}[a{i}]")
+            partes = [f"[v{i}][a{i}]" for i in range(len(tramos))]
             if con_cierre:
                 fc.append(f"color=c={marca['color_fondo_cierre']}:s={W}x{H}:r={FPS}:d={CIERRE_SEG},setsar=1,format=yuv420p[cv]")
                 fc.append(f"anullsrc=r=48000:cl=stereo,atrim=duration={CIERRE_SEG}[ca]")
-                fc.append("[ac]aresample=48000,aformat=channel_layouts=stereo[acs]")
-                fc.append("[vv][acs][cv][ca]concat=n=2:v=1:a=1[vcat][acat]")
-                ultimo_v, ultimo_a = "vcat", "acat"
-            fc.append(f"[{ultimo_v}]ass=subs.ass[vs]")
+                partes.append("[cv][ca]")
+            fc.append("".join(partes) + f"concat=n={len(partes)}:v=1:a=1[vcat][acat]")
+            fc.append("[vcat]ass=subs.ass[vs]")
             ultimo_v = "vs"
             if logo_ok:
+                ia, il = n_src, n_src + 1
                 if version == "tiktok":
-                    fc.append("[1:v]scale=130:-1,format=rgba,colorchannelmixer=aa=0.85[lg]")
-                    fc.append(f"[{ultimo_v}][lg]overlay=W-w-40:110[vl]")
+                    fc.append(f"[{ia}:v]scale=130:-1,format=rgba,colorchannelmixer=aa=0.85[lg]")
+                    fc.append("[vs][lg]overlay=W-w-40:110[vl]")
                 else:
-                    fc.append("[1:v]scale=170:-1,format=rgba[lg]")
-                    fc.append("[2:v]scale=560:-1,format=rgba[lgbig]")
-                    fc.append(f"[{ultimo_v}][lg]overlay=W-w-40:110:enable='lt(t,{dur:.2f})'[vl0]")
+                    fc.append(f"[{ia}:v]scale=170:-1,format=rgba[lg]")
+                    fc.append(f"[{il}:v]scale=560:-1,format=rgba[lgbig]")
+                    fc.append(f"[vs][lg]overlay=W-w-40:110:enable='lt(t,{dur:.2f})'[vl0]")
                     fc.append(f"[vl0][lgbig]overlay=(W-w)/2:(H-h)/2-200:enable='gte(t,{dur:.2f})'[vl]")
                 ultimo_v = "vl"
-            fc.append(f"[{ultimo_a}]loudnorm=I=-14:TP=-1.5:LRA=11[aout]")
+            fc.append("[acat]loudnorm=I=-14:TP=-1.5:LRA=11[aout]")
             cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", *entradas,
                    "-filter_complex", ";".join(fc), "-map", f"[{ultimo_v}]", "-map", "[aout]",
                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
                    "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", str(out.resolve())]
-            print(f"Renderizando {version}: {out.name} ({dur:.1f} s de contenido, {n} tramos)...")
+            print(f"Renderizando {version}: {out.name} ({dur:.1f} s, {len(tramos)} tramos de {n_src} videos)...")
             subprocess.run(cmd, check=True, cwd=tmp)
         print(f"  OK -> {out}")
+
+
+# ---------------------------------------------------------------- fotogramas
+def fotogramas(video, n=8):
+    """Hoja de contacto (una sola imagen) para que el agente VEA el video sin gastar mucho cupo."""
+    d = duracion(video)
+    salida = Path(f"{video}.fotogramas.jpg")
+    paso = d / n
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(video), "-vf",
+           f"fps=1/{paso:.3f},scale=480:-2,drawtext=text='%{{pts\\:hms}}':x=10:y=10:fontsize=28:"
+           f"fontcolor=white:box=1:boxcolor=black@0.6,tile=4x{(n + 3) // 4}",
+           "-frames:v", "1", "-q:v", "4", str(salida)]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:  # sin fuente para drawtext: hoja sin marcas de tiempo
+        cmd[cmd.index("-vf") + 1] = f"fps=1/{paso:.3f},scale=480:-2,tile=4x{(n + 3) // 4}"
+        subprocess.run(cmd, check=True)
+    print(f"{salida}  (cada cuadro ≈ {paso:.1f} s; duración total {d:.1f} s)")
 
 
 def main():
@@ -311,6 +373,7 @@ def main():
     t = sp.add_parser("transcribir"); t.add_argument("video"); t.add_argument("--modelo", default="small")
     s = sp.add_parser("silencios"); s.add_argument("video")
     r = sp.add_parser("render"); r.add_argument("config")
+    fg = sp.add_parser("fotogramas"); fg.add_argument("video"); fg.add_argument("--n", type=int, default=8)
     a = p.parse_args()
     if a.cmd == "transcribir":
         transcribir(a.video, a.modelo)
@@ -318,6 +381,8 @@ def main():
         total = duracion(a.video)
         print(json.dumps([{"inicio": round(x, 2), "fin": round(y, 2)}
                           for x, y in tramos_con_voz(0, total, detectar_silencios(a.video))], indent=1))
+    elif a.cmd == "fotogramas":
+        fotogramas(a.video, a.n)
     else:
         render(a.config)
 

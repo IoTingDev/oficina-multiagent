@@ -11,3 +11,7 @@ redes/publicado/*.mp4
 .claude/settings.local.json
 
 __pycache__/
+
+# Análisis temporal del editor
+*.fotogramas.jpg
+revision_frames/

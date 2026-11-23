@@ -35,6 +35,24 @@ python scripts/video/editar.py render redes/crudos/sensor-cacao.corte.json
 }
 ```
 
+## Historias con varios videos
+Cada segmento puede venir de un archivo distinto, y `velocidad` acelera un tramo (timelapse, con el audio silenciado en ese tramo):
+```json
+{
+  "nombre": "2026-11-24_replica-3d",
+  "gancho": {"tiktok": "Nos llegó esta pieza rota…", "instagram": "Réplica funcional por impresión 3D"},
+  "segmentos": [
+    {"fuente": "redes/crudos/05.mp4", "inicio": 3.0, "fin": 6.5},
+    {"fuente": "redes/crudos/01.mp4", "inicio": 0.0, "fin": 12.0},
+    {"fuente": "redes/crudos/03.mp4", "inicio": 0.0, "fin": 80.0, "velocidad": 8},
+    {"fuente": "redes/crudos/05.mp4", "inicio": 6.5, "fin": 20.0}
+  ]
+}
+```
+
+## Ver un video sin abrirlo
+`python scripts/video/editar.py fotogramas redes/crudos/01.mp4` crea `01.mp4.fotogramas.jpg`, una hoja de 8 cuadros con marcas de tiempo.
+
 ## Qué hace
 - Une los segmentos y quita silencios de más de 0,6 s.
 - Pasa a vertical 1080×1920. Si el video es horizontal, pone fondo desenfocado.
