@@ -9,3 +9,4 @@ Estados: `PENDIENTE` · `EN CURSO` · `POR APROBAR` · `HECHO` · `BLOQUEADO`
 | 3 | `codex login` con ChatGPT Plus (paso manual) | Juan | PENDIENTE | docs/codex.md |
 | 4 | Primer lote: 2 o 3 videos crudos → versiones TikTok e IG | editor-video + guionista | PENDIENTE | redes/crudos/ |
 | 5 | Calendario de la primera semana | estratega-redes | PENDIENTE | redes/calendario/ |
+| 6 | Primera campaña publicitaria (`/anuncio`) | disenador-publicidad | PENDIENTE | publicidad/ |

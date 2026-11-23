@@ -24,3 +24,9 @@ Equipo de agentes de IA para DEV INGENION SAS, gerenciado por Claude.
 
 ## Para tus otros repos
 Copia `.claude/agents/dev-software.md` y `AGENTS.md` a cada proyecto (panel_admin_ingenion, app_finanzas, etc.) para que trabajen con las mismas reglas.
+
+## Publicidad
+`/anuncio <tema>` crea imágenes publicitarias (feed, cuadrado, historia) con tus fotos reales y la marca, 3 variantes A/B, textos y plan de pauta. Las fotos van en `publicidad/fotos/`, las piezas salen en `publicidad/por-aprobar/`. Los resultados reales de cada campaña se anotan en `publicidad/aprendizajes.md`.
+
+## Rutina semanal
+`/semana` cada lunes: tendencias del nicho, calendario y lista de qué grabar.

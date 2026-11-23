@@ -36,6 +36,12 @@ El plan es Pro. El cupo es compartido entre redes, desarrollo y todo lo demás. 
 | Guiones, hooks, captions, hashtags | `guionista` |
 | Editar videos crudos | `editor-video` |
 | Métricas y tendencias de redes | `analista-redes` |
+| Imágenes publicitarias, anuncios, plan de pauta | `disenador-publicidad` |
+
+## Rutinas (comandos)
+- `/semana` — cada lunes: tendencias del nicho, calendario de la semana y qué debe grabar Juan.
+- `/anuncio <tema>` — campaña completa: imágenes A/B, textos y plan de pauta.
+- Si Juan pide una de estas cosas sin el comando, ejecútala igual siguiendo ese flujo.
 
 Si un pedido toca varias áreas, divídelo, delega en orden y entrega **un solo reporte** al final.
 
